@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultra-High Res Mermaid Converter</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.0.0/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #f4f4f4; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #ddd; }
+        h2 { margin-top: 0; color: #000; font-weight: 700; }
+        textarea { width: 100%; height: 220px; padding: 12px; border: 1px solid #000; border-radius: 4px; font-family: "Fira Code", monospace; font-size: 14px; box-sizing: border-box; background: #fff; color: #000; }
+        textarea:focus { outline: none; box-shadow: 0 0 0 2px rgba(0,0,0,0.2); }
+        .controls { display: flex; gap: 10px; margin: 15px 0; }
+        button { padding: 10px 18px; cursor: pointer; border: 2px solid #000; border-radius: 4px; background: #fff; color: #000; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #000; color: #fff; }
+        button.primary { background: #000; color: #fff; }
+        button.primary:hover { background: #333; border-color: #333; }
+        #output-wrapper { 
+            background: #ffffff; 
+            border: 2px solid #000; 
+            border-radius: 4px; 
+            margin-top: 20px;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            overflow: auto;
+            min-height: 200px;
+        }
+        
+        /* CRITICAL: Prevents large charts from being squished on screen prior to export */
+        #output { display: inline-block; background: white; }
+        #output svg { max-width: none !important; height: auto !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Mermaid Ultra-HQ Converter (Strict B&W)</h2>
+    <textarea id="input" placeholder="Enter mermaid code...">
+mindmap
+  root((Pure B&W))
+    Aesthetics
+      White Background
+      Black Text
+      Black Outlines
+      Black Arrows
+    Performance
+      2K and 4K Resolution
+      Extreme Zooming
+    Features
+      No Stretched PDF
+      Pixel Perfect Maps</textarea>
+    
+    <div class="controls">
+        <button class="primary" onclick="renderGraph()">Render Preview</button>
+        <button onclick="download('jpg')">Download Ultra-HQ JPG</button>
+        <button onclick="download('pdf')">Download Ultra-HQ PDF</button>
+    </div>
+
+    <div id="output-wrapper">
+        <div id="output"></div>
+    </div>
+</div>
+
+<script>
+    mermaid.initialize({ 
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: 'base',
+        themeVariables: {
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+            background: '#ffffff',
+            primaryColor: '#ffffff',
+            primaryTextColor: '#000000',
+            primaryBorderColor: '#000000',
+            lineColor: '#000000',
+        },
+        // The magic bullet: Hard overrides for stubborn chart elements like mindmaps
+        themeCSS: `
+            /* Force all shapes/nodes to white fill with black outline */
+            .node rect, .node circle, .node ellipse, .node polygon, .node path,
+            .mindmap-node rect, .mindmap-node circle, .mindmap-node polygon, .mindmap-node path, .mindmap-bg {
+                fill: #ffffff !important;
+                stroke: #000000 !important;
+                stroke-width: 2px !important;
+            }
+            /* Force all connection lines/arrows to pure black */
+            .edgePath .path, .mindmap-edge {
+                stroke: #000000 !important;
+                stroke-width: 2px !important;
+                fill: none !important;
+            }
+            /* Force arrowheads to black */
+            .marker, marker path {
+                fill: #000000 !important;
+                stroke: none !important;
+            }
+            /* Force all text to black */
+            .node text, .edgeLabel, .mindmap-node text, .label text, span, .text-inner {
+                fill: #000000 !important;
+                color: #000000 !important;
+            }
+            /* Clean up backgrounds behind text labels on lines */
+            .edgeLabel rect, .label-container {
+                fill: #ffffff !important;
+                stroke: none !important;
+            }
+            /* Styling for grouping/cluster boxes */
+            .cluster rect {
+                fill: #ffffff !important;
+                stroke: #000000 !important;
+                stroke-width: 2px !important;
+                stroke-dasharray: 4 !important;
+            }
+        `
+    });
+
+    async function renderGraph() {
+        const input = document.getElementById('input').value;
+        const output = document.getElementById('output');
+        output.innerHTML = '<span style="color:#000;">Rendering...</span>';
+        
+        try {
+            const id = 'mermaid-svg-' + Date.now();
+            const { svg } = await mermaid.render(id, input);
+            output.innerHTML = svg;
+        } catch (err) {
+            output.innerHTML = `<span style="color:red; font-weight:bold;">Error: ${err.message}</span>`;
+        }
+    }
+
+    async function download(format) {
+        const svgElement = document.querySelector('#output svg');
+        
+        if (!svgElement) {
+            alert("Render a valid graph first.");
+            return;
+        }
+
+        try {
+            // 1. Get true mathematical dimensions
+            let trueWidth = svgElement.viewBox?.baseVal?.width;
+            let trueHeight = svgElement.viewBox?.baseVal?.height;
+
+            if (!trueWidth || !trueHeight) {
+                const rect = svgElement.getBoundingClientRect();
+                trueWidth = rect.width;
+                trueHeight = rect.height;
+            }
+
+            // 2. Temporarily force the SVG to its true physical size in the DOM
+            const originalWidth = svgElement.getAttribute('width');
+            const originalHeight = svgElement.getAttribute('height');
+            svgElement.setAttribute('width', trueWidth + 'px');
+            svgElement.setAttribute('height', trueHeight + 'px');
+
+            // 3. Export settings (5x multiplier for extreme zoom)
+            const options = { 
+                backgroundColor: '#ffffff', 
+                pixelRatio: 5,
+                width: trueWidth,
+                height: trueHeight,
+                style: { margin: '0', padding: '0', maxWidth: 'none' }
+            };
+
+            if (format === 'jpg') {
+                const dataUrl = await htmlToImage.toJpeg(svgElement, { ...options, quality: 1.0 });
+                const link = document.createElement('a');
+                link.download = 'mermaid-bw-ultrahq.jpg';
+                link.href = dataUrl;
+                link.click();
+            } else if (format === 'pdf') {
+                const dataUrl = await htmlToImage.toPng(svgElement, options);
+                const { jsPDF } = window.jspdf;
+                
+                const pdf = new jsPDF({
+                    orientation: trueWidth > trueHeight ? 'l' : 'p',
+                    unit: 'pt',
+                    format: [trueWidth, trueHeight]
+                });
+
+                pdf.addImage(dataUrl, 'PNG', 0, 0, trueWidth, trueHeight);
+                pdf.save("mermaid-bw-ultrahq.pdf");
+            }
+
+            // 4. Restore original DOM attributes
+            if (originalWidth) svgElement.setAttribute('width', originalWidth);
+            else svgElement.removeAttribute('width');
+            
+            if (originalHeight) svgElement.setAttribute('height', originalHeight);
+            else svgElement.removeAttribute('height');
+
+        } catch (error) {
+            console.error('Export failed', error);
+            alert("Export failed. View console for errors.");
+        }
+    }
+
+    renderGraph();
+</script>
+
+</body>
+</html>
